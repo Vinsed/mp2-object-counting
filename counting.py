@@ -12,7 +12,7 @@ def parse_args():
     )
     parser.add_argument(
         "--image",
-        default="input/parking_ori.jpg",
+        default="input/parking.jpg",
         help="Path to the input image.",
     )
     parser.add_argument(
@@ -28,10 +28,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def ensure_output_dir(output_dir):
+def ensure_output_dirs(output_dir):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    return output_path
+    steps_path = output_path / "steps"
+    steps_path.mkdir(parents=True, exist_ok=True)
+    return output_path, steps_path
 
 
 def clamp_box(box, shape):
@@ -310,7 +312,7 @@ def save_score_map(score_map, output_path):
     normalized = cv2.normalize(score_map, None, 0, 255, cv2.NORM_MINMAX)
     normalized = normalized.astype(np.uint8)
     heatmap = cv2.applyColorMap(normalized, cv2.COLORMAP_JET)
-    cv2.imwrite(str(output_path / "04_sliding_window_score_map.jpg"), heatmap)
+    cv2.imwrite(str(output_path / "05_sliding_window_score_map.png"), heatmap)
 
 
 def save_final_visualization(image_bgr, detections, output_path):
@@ -346,24 +348,24 @@ def save_final_visualization(image_bgr, detections, output_path):
         cv2.LINE_AA,
     )
 
-    cv2.imwrite(str(output_path / "05_detected_cars.jpg"), visual)
+    cv2.imwrite(str(output_path / "result.png"), visual)
 
 
 def save_masks(line_mask, evidence_mask, red_mask, output_path):
-    cv2.imwrite(str(output_path / "02_parking_line_mask.jpg"), line_mask)
-    cv2.imwrite(str(output_path / "03_car_evidence_mask.jpg"), evidence_mask)
-    cv2.imwrite(str(output_path / "03_red_car_mask.jpg"), red_mask)
+    cv2.imwrite(str(output_path / "02_parking_line_mask.png"), line_mask)
+    cv2.imwrite(str(output_path / "03_car_evidence_mask.png"), evidence_mask)
+    cv2.imwrite(str(output_path / "04_red_car_mask.png"), red_mask)
 
 
 def main():
     args = parse_args()
-    output_path = ensure_output_dir(args.output)
+    output_path, steps_path = ensure_output_dirs(args.output)
 
     image_bgr = cv2.imread(args.image)
     if image_bgr is None:
         raise FileNotFoundError(f"Could not read image: {args.image}")
 
-    save_color_space_exploration(image_bgr, output_path)
+    save_color_space_exploration(image_bgr, steps_path)
 
     line_mask = build_parking_line_mask(image_bgr)
     evidence_mask = build_evidence_mask(image_bgr, line_mask)
@@ -382,8 +384,8 @@ def main():
     top_edge_detections.sort(key=lambda item: (item["box"][1], item["box"][0]))
     detections = regular_detections + top_edge_detections
 
-    save_masks(line_mask, evidence_mask, red_mask, output_path)
-    save_score_map(score_map, output_path)
+    save_masks(line_mask, evidence_mask, red_mask, steps_path)
+    save_score_map(score_map, steps_path)
     save_final_visualization(image_bgr, detections, output_path)
 
     print(f"Input image: {args.image}")
@@ -393,10 +395,7 @@ def main():
     print(f"Outputs saved to: {output_path}")
 
     if args.show:
-        final_image = cv2.cvtColor(
-            cv2.imread(str(output_path / "05_detected_cars.jpg")),
-            cv2.COLOR_BGR2RGB,
-        )
+        final_image = cv2.cvtColor(cv2.imread(str(output_path / "result.png")), cv2.COLOR_BGR2RGB)
         plt.figure(figsize=(14, 8))
         plt.imshow(final_image)
         plt.axis("off")
