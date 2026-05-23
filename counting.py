@@ -182,6 +182,11 @@ def detect_horizontal_cars(image_bgr, evidence_mask):
 
     detections = []
     for x, y, score in peaks:
+        # Peaks very close to the lower border are usually padding echoes from
+        # the last visible row of cars, not a new car.
+        if y > height - window_height * 0.25:
+            continue
+
         box = clamp_box(
             (
                 x - window_width // 2,
@@ -199,6 +204,55 @@ def detect_horizontal_cars(image_bgr, evidence_mask):
                 "source": "sliding-window",
             }
         )
+
+    edge_window_height = max(35, int(round(window_height * 0.38)))
+    top_score_map = cv2.boxFilter(
+        evidence_float,
+        ddepth=-1,
+        ksize=(window_width, edge_window_height),
+        normalize=True,
+        borderType=cv2.BORDER_REPLICATE,
+    )
+    top_score_map[edge_window_height:, :] = 0
+
+    top_peaks = extract_local_maxima(
+        top_score_map,
+        threshold=0.40,
+        suppress_width=int(round(window_width * 1.67)),
+        suppress_height=edge_window_height * 2,
+    )
+
+    for x, _, score in top_peaks:
+        box = clamp_box(
+            (
+                x - window_width // 2,
+                0,
+                x + window_width // 2,
+                edge_window_height,
+            ),
+            image_bgr.shape,
+        )
+
+        center_x = (box[0] + box[2]) / 2
+        is_duplicate = False
+        for detection in detections:
+            existing_box = detection["box"]
+            existing_center_x = (existing_box[0] + existing_box[2]) / 2
+            same_top_area = existing_box[1] < edge_window_height * 1.2
+            same_column = abs(center_x - existing_center_x) < window_width * 0.6
+            if same_top_area and same_column:
+                is_duplicate = True
+                break
+
+        if not is_duplicate:
+            detections.append(
+                {
+                    "label": "partial car",
+                    "box": box,
+                    "score": score,
+                    "source": "top-edge-window",
+                }
+            )
 
     return detections, score_map
 
@@ -264,7 +318,11 @@ def save_final_visualization(image_bgr, detections, output_path):
 
     for index, detection in enumerate(detections, start=1):
         x1, y1, x2, y2 = detection["box"]
-        color = (0, 255, 0) if detection["source"] == "sliding-window" else (0, 128, 255)
+        color = (
+            (0, 255, 0)
+            if detection["source"] in {"sliding-window", "top-edge-window"}
+            else (0, 128, 255)
+        )
         cv2.rectangle(visual, (x1, y1), (x2, y2), color, 4)
         cv2.putText(
             visual,
@@ -314,7 +372,15 @@ def main():
     red_detections, red_mask = detect_red_cars(image_bgr)
 
     detections = horizontal_detections + red_detections
-    detections.sort(key=lambda item: (item["box"][1], item["box"][0]))
+    regular_detections = [
+        detection for detection in detections if detection["source"] != "top-edge-window"
+    ]
+    top_edge_detections = [
+        detection for detection in detections if detection["source"] == "top-edge-window"
+    ]
+    regular_detections.sort(key=lambda item: (item["box"][1], item["box"][0]))
+    top_edge_detections.sort(key=lambda item: (item["box"][1], item["box"][0]))
+    detections = regular_detections + top_edge_detections
 
     save_masks(line_mask, evidence_mask, red_mask, output_path)
     save_score_map(score_map, output_path)

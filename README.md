@@ -27,7 +27,7 @@ Output utama:
    - saturasi HSV untuk mobil berwarna dan kaca,
    - area gelap untuk kaca/mobil gelap.
 4. Morphology opening dan dilation dipakai untuk membersihkan noise dan menyambungkan bagian mobil yang terfragmentasi.
-5. Mobil horizontal dicari otomatis dengan sliding window/score map. Setiap lokasi diberi skor berdasarkan kepadatan evidence mask, lalu local maxima dipilih menggunakan non-maximum suppression agar satu mobil tidak dihitung berkali-kali.
+5. Mobil horizontal dicari otomatis dengan sliding window/score map. Setiap lokasi diberi skor berdasarkan kepadatan evidence mask, lalu local maxima dipilih menggunakan non-maximum suppression agar satu mobil tidak dihitung berkali-kali. Untuk mobil yang terpotong di tepi atas, program memakai window yang lebih pendek khusus area border.
 6. Mobil merah dideteksi terpisah dengan threshold HSV merah, morphology, `cv2.findContours`, dan filter area/aspect ratio.
 
 ## Hasil
